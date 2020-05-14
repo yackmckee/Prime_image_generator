@@ -132,9 +132,11 @@ fn miller_rabin (n: &BigUint) -> bool {
 fn main() {
     //args
     let a: Vec<String> = std::env::args().collect();
-    let val_inner: BigUint = BigUint::parse_bytes(a[1].as_bytes(),2).unwrap() << 24; //shift by 24 because we will be adding a 24-bit number at the end for a nice big search space
+    let val_inner: BigUint = BigUint::from_bytes_be(&a[1].as_bytes()) << 24;
     let num_threads = usize::from_str(a[2].as_str()).unwrap();
-    let limit = a[1].len()/32 + 1;
+    let limit = val_inner.bits()/32 + 1;
+
+    println!("performing search through {} bits with {} threads", val_inner.bits(), num_threads);
     
     //first: use the seive of erasthones to generate the first 100 primes and their
     //precomputations
@@ -162,21 +164,35 @@ fn main() {
         let primes = Arc::clone(&primes_global);
         thread::spawn( move || {
             let mut try_count = 0;
+            let mut rng = local_rng();
 		    loop {
-		        let this_guess = (&val as &BigUint) + ((local_rng().get_u32() | 1) & 0x00ffffff); //set the low bit so that this_guess is always odd
+                let mut random_part_vec: [u8;4] = [0,0,0,0];
+                rng.fill_bytes(&mut random_part_vec);
+                random_part_vec[0] = 0;
+                random_part_vec[3] |= 1; //set the low bit so the number is never even
+                for i in 1..4 {
+                    random_part_vec[i] &= 0x7f; // make it valid ASCII
+                    if random_part_vec[i] < 0x20 { //get rid of non-printable characters
+                        random_part_vec[i] |= 0x20;
+                    } else if random_part_vec[i] == 0x7f { 
+                        random_part_vec[i] = 0x7d; //make sure the last bit stays set if it was set before
+                    }
+                }
+                let fixed_random_part = u32::from_be_bytes(random_part_vec);
+		        let this_guess = (&val as &BigUint) + fixed_random_part; //set the low bit so that this_guess is always odd, and always filter so that only valid ASCII characters are included
                 try_count += 1;
-                //check if it's valid UTF-8
-                let this_guess_bytes = this_guess.to_bytes_le();
-                if std::str::from_utf8(&this_guess_bytes).is_ok() {
 		        if first_pass_primality_check(&this_guess,&primes) {
 		            if miller_rabin(&this_guess) {
+                        let this_guess_bytes = this_guess.to_bytes_be();
 		                println!("new guess:");
-		                println!("{:b}",this_guess);
+		                println!("\"{}\"",std::str::from_utf8(&this_guess_bytes).unwrap());
+                        for b in this_guess_bytes.iter() {
+                            print!("{:0>8b} ",b);
+                        }
                         println!("after {} tries",try_count);
                         std::process::exit(0);
 		            }
 		        }
-                }
 		    }
 	    })
     }).collect();
