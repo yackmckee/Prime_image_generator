@@ -1,0 +1,18 @@
+[package]
+name = "prime_image_generator"
+version = "0.1.0"
+authors = ["nunya <nunya@biznatch.io>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[profile.release]
+opt-level = 3
+overflow-checks = false
+lto = true
+panic = "abort"
+
+
+[dependencies]
+num-bigint = "0.2.6"
+random-fast-rng = "0.1.1"
+cpu-time = "1.0.0"
