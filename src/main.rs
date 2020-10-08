@@ -1,52 +1,13 @@
 extern crate num_bigint;
 extern crate random_fast_rng;
-//extern crate cpu_time;
+mod fastmod;
 
 use num_bigint::BigUint;
 use std::thread;
 use std::sync::Arc;
 use std::str::FromStr;
 use random_fast_rng::{Random,local_rng};
-//use cpu_time::ProcessTime;
-
-fn precompute_bignum_bignum(limit: usize, k: &BigUint) -> Vec<BigUint> {
-    let mut last_pow_pow_32 = BigUint::from(1u32);
-    let mut ret: Vec<BigUint> = Vec::with_capacity(limit);
-    for _ in 0..limit+1 {
-        ret.push(last_pow_pow_32.clone());
-        last_pow_pow_32 = (last_pow_pow_32 << 32) % k;
-    }
-    ret
-}
-
-fn precompute_bignum_u32(limit: usize, k: u32) -> Vec<u32> {
-    let mut last_pow_pow_32: u32 = 1;
-    let mut ret: Vec<u32> = Vec::with_capacity(limit);
-    for _ in 0..limit+1 {
-        ret.push(last_pow_pow_32);
-        last_pow_pow_32 = ((u64::from(last_pow_pow_32) << 32) % u64::from(k)) as u32;
-    }
-    ret
-}
-
-//assumes you have enough digits precomputed to do the thing here
-fn fastmod_bignum_bignum(n: &BigUint, k: &BigUint, precomputed: &Vec<BigUint>) -> BigUint {
-    let mut sum = BigUint::from(0u32);
-    let digits = n.to_u32_digits();
-    for (i,d) in digits.iter().enumerate() {
-        sum += &precomputed[i]*d;
-    }
-    sum % k
-}
-
-fn fastmod_bignum_u32(n: &BigUint, k: u32, precomputed: &Vec<u32>) -> u32 {
-    let mut sum: u64 = 0;
-    let digits = n.to_u32_digits();
-    for (i,d) in digits.iter().enumerate() {
-        sum += u64::from(precomputed[i])*u64::from(*d);
-    }
-    (sum % u64::from(k)) as u32
-}
+use fastmod::*;
 
 //checks against the first 100 primes
 //returns true if none of the first 100 primes divide this number
@@ -84,12 +45,12 @@ fn miller_rabin (n: &BigUint) -> bool {
     let a = 2u32;
     let mut cur_power = BigUint::from(a).modpow(&q,n); //use built-in modpow for this step; it will be much faster for a nontrivial power
     if cur_power != BigUint::from(1u32) {
-	    for _ in 0..k {
-	        cur_power = fastmod_bignum_bignum(&(&cur_power*&cur_power),n,&precomputed);
-	        if cur_power == negative_one {
-	            break; //2^(2^l)q = -1 for some l, so this base is not a witness.
-	        }
-	    }
+        for _ in 0..k {
+            cur_power = fastmod_bignum_bignum(&(&cur_power*&cur_power),n,&precomputed);
+            if cur_power == negative_one {
+                break; //2^(2^l)q = -1 for some l, so this base is not a witness.
+            }
+        }
         //if we got here, then 2 is a witness, so n is definitely not prime
         return false;
     }
@@ -97,12 +58,12 @@ fn miller_rabin (n: &BigUint) -> bool {
     let a = 3u32;
     let mut cur_power = BigUint::from(a).modpow(&q,n); //use built-in modpow for this step; it will be much faster for a nontrivial power
     if cur_power != BigUint::from(1u32) {
-	    for _ in 0..k {
-	        cur_power = fastmod_bignum_bignum(&(&cur_power*&cur_power),n,&precomputed);
-	        if cur_power == negative_one {
-	            break; //3^(2^l)q = -1 for some l, so this base is not a witness.
-	        }
-	    }
+        for _ in 0..k {
+            cur_power = fastmod_bignum_bignum(&(&cur_power*&cur_power),n,&precomputed);
+            if cur_power == negative_one {
+                break; //3^(2^l)q = -1 for some l, so this base is not a witness.
+            }
+        }
         //if we got here, then 3 is a witness, so n is definitely not prime
         return false;
     }
@@ -165,7 +126,7 @@ fn main() {
         thread::spawn( move || {
             let mut try_count = 0;
             let mut rng = local_rng();
-		    loop {
+            loop {
                 let mut random_part_vec: [u8;4] = [0,0,0,0];
                 rng.fill_bytes(&mut random_part_vec);
                 random_part_vec[0] = 0;
@@ -179,22 +140,22 @@ fn main() {
                     }
                 }
                 let fixed_random_part = u32::from_be_bytes(random_part_vec);
-		        let this_guess = (&val as &BigUint) + fixed_random_part; //set the low bit so that this_guess is always odd, and always filter so that only valid ASCII characters are included
+                let this_guess = (&val as &BigUint) + fixed_random_part; 
                 try_count += 1;
-		        if first_pass_primality_check(&this_guess,&primes) {
-		            if miller_rabin(&this_guess) {
+                if first_pass_primality_check(&this_guess,&primes) {
+                    if miller_rabin(&this_guess) {
                         let this_guess_bytes = this_guess.to_bytes_be();
-		                println!("new guess:");
-		                println!("\"{}\"",std::str::from_utf8(&this_guess_bytes).unwrap());
+                        println!("new guess:");
+                        println!("\"{}\"",std::str::from_utf8(&this_guess_bytes).unwrap());
                         for b in this_guess_bytes.iter() {
                             print!("{:0>8b} ",b);
                         }
                         println!("after {} tries",try_count);
                         std::process::exit(0);
-		            }
-		        }
-		    }
-	    })
+                    }
+                }
+            }
+        })
     }).collect();
     for c in child_threads {
         c.join();
