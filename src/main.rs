@@ -7,7 +7,7 @@ use std::thread;
 use std::sync::Arc;
 use std::str::FromStr;
 use random_fast_rng::{Random,local_rng};
-use fastmod::*;
+use fastmod::{precompute_bignum_u32,precompute_bignum_bignum,fastmod_bignum_u32,fastmod_bignum_bignum};
 
 //checks against the first 100 primes
 //returns true if none of the first 100 primes divide this number
